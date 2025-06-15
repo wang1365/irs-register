@@ -4,6 +4,7 @@ import time
 import psutil
 import configparser
 from pywinauto import Application
+import win32com.client
 
 
 def get_pid_by_name(process_name):
@@ -16,6 +17,8 @@ class AutoRegister:
     def __init__(self):
         config = configparser.ConfigParser()
         config.read('config.ini')
+
+        self.shell = win32com.client.Dispatch("WScript.Shell")
 
         self.init_product_key = config['DEFAULT']['ProductKey']
         self.reg_key_suffix = config['DEFAULT']['RegistrationKeySuffix']
@@ -47,6 +50,11 @@ class AutoRegister:
                 retry -= 1
                 print('====> retry for', e)
 
+    def click_save_with_kb(self):
+        self.shell.SendKeys('%s')
+    def click_enter_with_kb(self):
+        self.shell.SendKeys('{ENTER}')
+
     def find_result_dlg(self):
         retry = 5
         while retry > 0:
@@ -70,31 +78,48 @@ class AutoRegister:
     def try_key(self, key):
         self.window.wait('exists', timeout=30, retry_interval=1)
         self.reg_key.set_text(key)
-        self.click(self.save_btn)
+        # self.click(self.save_btn)
+        self.click_save_with_kb()
+        self.click_enter_with_kb()
 
-        result = self.find_result_dlg()
-        try:
-            success = not result.child_window(title='Invalid Registration Key !').exists()
-            if success:
-                with open('result.txt', 'a') as f:
-                    f.write(f'{key}: {success}\n')
-
-            result.close()
-        except Exception as e:
-            # 打印异常堆栈
-            import traceback
-            print('====>', e)
-            traceback.print_exc()
+        # result = self.find_result_dlg()
+        # try:
+        #     success = not result.child_window(title='Invalid Registration Key !').exists()
+        #     if success:
+        #         with open('result.txt', 'a') as f:
+        #             f.write(f'{key}: {success}\n')
+        #
+        #     result.close()
+        # except Exception as e:
+        #     # 打印异常堆栈
+        #     import traceback
+        #     print('====>', e)
+        #     traceback.print_exc()
 
     def run(self):
         from datetime import datetime
         start = datetime.now()
         self.product_key.set_text(self.init_product_key)
 
+        key_found = False
+        # 创建一个线程来检测self.window是否存在,如果不存在则说明注册成功，key_found设置为True
+        def check_window_exists():
+            nonlocal key_found
+            while not key_found:
+                if not self.window.exists():
+                    key_found = True
+                    print('====> key found, exiting...')
+                    break
+                time.sleep(1)
+        import threading
+        threading.Thread(target=check_window_exists).start()
+
         random_keys = [f'{i}{self.reg_key_suffix}' for i in range(self.reg_key_start, self.reg_key_start + self.reg_key_count)]
         for i, key in enumerate(random_keys):
             print(f'{i}/{self.reg_key_count} - {key} - {datetime.now() - start}')
             self.try_key(key)
+            if key_found:
+                break
 
         end = datetime.now()
         print('total time:', end - start)
