@@ -1,0 +1,1 @@
+('D:\\private_code\\upwork\\auto-registry\\build\\main\\PYZ-00.pyz', [])
