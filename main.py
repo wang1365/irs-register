@@ -1,4 +1,5 @@
 # This is a sample Python script.
+import threading
 import time
 
 import psutil
@@ -13,12 +14,18 @@ def get_pid_by_name(process_name):
             return proc.info['pid']
     return None
 
+
 class AutoRegister:
     def __init__(self):
         config = configparser.ConfigParser()
         config.read('config.ini')
 
+        self.found = False
+        self.esc = False
         self.shell = win32com.client.Dispatch("WScript.Shell")
+
+        # 创建结果文件, 文件命名为 result_{时间戳，格式为年-月-日 时分秒}.txt
+        self.result_file = open(f'result_{datetime.now().strftime("%Y-%m-%d_%H_%M_%S")}.txt', 'a')
 
         self.init_product_key = config['DEFAULT']['ProductKey']
         self.reg_key_suffix = config['DEFAULT']['RegistrationKeySuffix']
@@ -39,6 +46,11 @@ class AutoRegister:
         self.reg_key = self.window.child_window(control_id=7)
         self.save_btn = self.window.child_window(control_id=8)
 
+    def log(self, msg):
+        print(msg)
+        self.result_file.write(msg + '\n')
+        self.result_file.flush()
+
     @staticmethod
     def click(ctl):
         retry = 3
@@ -52,6 +64,7 @@ class AutoRegister:
 
     def click_save_with_kb(self):
         self.shell.SendKeys('%s')
+
     def click_enter_with_kb(self):
         self.shell.SendKeys('{ENTER}')
 
@@ -101,28 +114,54 @@ class AutoRegister:
         start = datetime.now()
         self.product_key.set_text(self.init_product_key)
 
-        key_found = False
         # 创建一个线程来检测self.window是否存在,如果不存在则说明注册成功，key_found设置为True
         def check_window_exists():
-            nonlocal key_found
-            while not key_found:
-                if not self.window.exists():
-                    key_found = True
-                    print('====> key found, exiting...')
-                    break
+            while self.found:
+                if not self.window.exists(timeout=5, retry_interval=1):
+                    time.sleep(1)
+                    if not self.window.exists(timeout=3, retry_interval=1):
+                        self.found = True
+                        self.log('====> key found, exiting...')
+                        break
                 time.sleep(1)
+
         import threading
         threading.Thread(target=check_window_exists).start()
 
-        random_keys = [f'{i}{self.reg_key_suffix}' for i in range(self.reg_key_start, self.reg_key_start + self.reg_key_count)]
+        self.listen_esc()
+
+        random_keys = [f'{i}{self.reg_key_suffix}' for i in
+                       range(self.reg_key_start, self.reg_key_start + self.reg_key_count)]
         for i, key in enumerate(random_keys):
-            print(f'{i}/{self.reg_key_count} - {key} - {datetime.now() - start}')
+            self.log(f'{i}/{self.reg_key_count} - {key} - {datetime.now() - start}')
             self.try_key(key)
-            if key_found:
+            if self.found or self.esc:
                 break
 
         end = datetime.now()
-        print('total time:', end - start)
+        self.log(f'total time:{end - start}')
+
+    def listen_esc(self):
+        from pynput import keyboard
+        def on_press(key):
+            try:
+                # 检查按下的键是否为Esc键
+                if key == keyboard.Key.esc:
+                    self.log('Esc 键被按下了！')
+                    self.esc = True
+                    # 如果需要在Esc键被按下时停止监听，可以返回 `False`
+                    return False  # 返回 False 可以停止监听
+            except AttributeError:
+                # 非特殊按键，无需处理
+                pass
+
+        def run_listener():
+            # 创建一个监听器来监听键盘事件
+            with keyboard.Listener(on_press=on_press) as listener:
+                listener.join()
+
+        threading.Thread(target=run_listener).start()
+        # 创建一个监听器来监听键盘事件
 
 
 # Press the green button in the gutter to run the script.
@@ -140,6 +179,7 @@ if __name__ == '__main__':
         except Exception as e:
             # 打印异常堆栈
             import traceback
+
             traceback.print_exc()
 
     time.sleep(1)
