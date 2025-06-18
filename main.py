@@ -30,6 +30,7 @@ class AutoRegister:
         self.init_product_key = config['DEFAULT']['ProductKey']
         self.reg_key_suffix = config['DEFAULT']['RegistrationKeySuffix']
         self.reg_key_start = int(config['DEFAULT']['RegistrationKeyStart'])
+        self.reg_key_len = len(config['DEFAULT']['RegistrationKeyStart'])
         self.reg_key_count = int(config['DEFAULT']['RegistrationKeyCount'])
 
         # 获取记事本进程ID
@@ -130,10 +131,10 @@ class AutoRegister:
 
         self.listen_esc()
 
-        random_keys = [f'{i}{self.reg_key_suffix}' for i in
-                       range(self.reg_key_start, self.reg_key_start + self.reg_key_count)]
-        for i, key in enumerate(random_keys):
-            self.log(f'{i}/{self.reg_key_count} - {key} - {datetime.now() - start}')
+        for i in range(self.reg_key_count):
+            key_prefix = str(self.reg_key_start + i).zfill(self.reg_key_len)
+            key = key_prefix + self.reg_key_suffix
+            self.log(f'{i+1}/{self.reg_key_count} - {key} - {datetime.now() - start}')
             self.try_key(key)
             if self.found or self.esc:
                 break
@@ -171,8 +172,8 @@ if __name__ == '__main__':
     start = datetime.now()
 
     # 如果当前日期晚于2025-06-20，直接退出
-    if datetime.now() > datetime(2025, 6, 20):
-        print('license expired, exiting...')
+    if datetime.now() > datetime(2026, 5, 20):
+        print('>>>')
     else:
         try:
             AutoRegister().run()
