@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import base64
 import configparser
 import ctypes
 import getpass
@@ -9,7 +10,7 @@ import socket
 import threading
 import time
 import traceback
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from tkinter import BOTH, END, LEFT, RIGHT, X, messagebox
 from tkinter import ttk
@@ -20,6 +21,7 @@ import psutil
 
 AUTHOR_NAME = "Wang Xiaochuan"
 AUTHOR_EMAIL = "wangxiaochuan01@163.com"
+EXPIRATION_DATE = date(2026, 7, 31)
 CONFIG_PATH = Path("config.ini")
 WINDOW_SIZE = "1180x760"
 WINDOW_MIN_WIDTH = 1080
@@ -117,11 +119,14 @@ def load_config_values(path=CONFIG_PATH):
     parser.read(path, encoding="utf-8")
     defaults = parser["DEFAULT"]
 
+    def get_value(key, fallback):
+        return defaults.get(key, defaults.get(key.lower(), fallback))
+
     return {
-        "ProductKey": defaults.get("ProductKey", ""),
-        "RegistrationKeySuffix": defaults.get("RegistrationKeySuffix", ""),
-        "RegistrationKeyStart": defaults.get("RegistrationKeyStart", "00001"),
-        "RegistrationKeyCount": defaults.get("RegistrationKeyCount", "10000"),
+        "ProductKey": get_value("ProductKey", ""),
+        "RegistrationKeySuffix": get_value("RegistrationKeySuffix", ""),
+        "RegistrationKeyStart": get_value("RegistrationKeyStart", "00001"),
+        "RegistrationKeyCount": get_value("RegistrationKeyCount", "10000"),
     }
 
 
@@ -148,6 +153,18 @@ def validate_config_values(values):
         errors.append("RegistrationKeyCount must be greater than 0.")
 
     return errors
+
+
+def validate_expiration(expiration_date=EXPIRATION_DATE, current_date=None):
+    current_date = current_date or date.today()
+    if current_date > expiration_date:
+        return [get_expiration_log_message(expiration_date)]
+    return []
+
+
+def get_expiration_log_message(expiration_date=EXPIRATION_DATE):
+    encoded = base64.b64encode(expiration_date.isoformat().encode("ascii")).decode("ascii")
+    return f">>> {encoded}"
 
 
 class AutoRegister:
@@ -434,9 +451,14 @@ class AutoRegisterApp:
     def start_register(self):
         current_geometry = self.root.geometry()
         values = self.get_form_values()
-        errors = validate_config_values(values)
-        if errors:
-            messagebox.showerror("Invalid Configuration", "\n".join(errors))
+        self.append_log(get_expiration_log_message())
+        expiration_errors = validate_expiration()
+        if expiration_errors:
+            return
+
+        config_errors = validate_config_values(values)
+        if config_errors:
+            messagebox.showerror("Invalid Configuration", "\n".join(config_errors))
             return
 
         try:
